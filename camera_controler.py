@@ -6,30 +6,47 @@ import time
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# Function to calculate angle
+# Initialization
+previous_shoulder_y = 0  # Assuming starting in a standing position
+jump_in_progress = False
+jump_counter = 0
+crouch_counter = 0
 
 
-def calculate_angle(a, b, c):
-    a = np.array(a)  # First
-    b = np.array(b)  # Mid
-    c = np.array(c)  # End
+def detect_movement(landmarks):
+    global previous_shoulder_y, jump_in_progress, jump_counter, crouch_counter
 
-    radians = np.arctan2(c[1]-b[1], c[0]-b[0])-np.arctan2(a[1]-b[1], a[0]-b[0])
-    angle = np.abs(radians*180.0/np.pi)
+    # Calculate the average y-coordinate of both shoulders
+    shoulder_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
+                  landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
 
-    if angle > 180.0:
-        angle = 360-angle
+    # Calculate the average y-coordinate of both ankles
+    ankle_y = (landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y +
+               landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y) / 2
 
-    return angle
+    # Detect jump (significant upward movement)
+    if not jump_in_progress and previous_shoulder_y - shoulder_y > 0.05:  # Threshold for jump start
+        jump_in_progress = True
+    elif jump_in_progress and shoulder_y - previous_shoulder_y > 0.05:  # Threshold for jump end
+        jump_in_progress = False
+        jump_counter += 1
+
+    # Calculate the distance between shoulders and ankles
+    distance = ankle_y - shoulder_y
+    # Detect crouch (significant downward movement)
+    # Assuming a lower threshold indicates a crouch
+    if distance < 0.8:
+        crouch_counter += 1
+
+    previous_shoulder_y = shoulder_y
+    return jump_counter, crouch_counter
 
 
 # Video Feed
 cap = cv2.VideoCapture(0)
 
-# Curl counter variables
-counter = 0
-stage = None
-pTime = 0
+# Initialize jumps and crouches before the try block
+jumps, crouches = 0, 0
 
 # Setup mediapipe instance
 with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
@@ -47,100 +64,19 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        # Extract Landmarks
         try:
             landmarks = results.pose_landmarks.landmark
 
-            # Get coordinates
-            shoulder1 = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
-                         landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
-            hip1 = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x,
-                    landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
-            wrist1 = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
-                      landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
-            ankle1 = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x,
-                      landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y]
-
-            shoulder2 = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x,
-                         landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
-            hip2 = [landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x,
-                    landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y]
-            wrist2 = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x,
-                      landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
-            ankle2 = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x,
-                      landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y]
-
-            # Calculate angle
-            angle1 = calculate_angle(hip1, shoulder1, wrist1)
-            angle2 = calculate_angle(hip2, shoulder2, wrist2)
-            angle3 = calculate_angle(shoulder1, hip1, ankle1)
-            angle4 = calculate_angle(shoulder2, hip2, ankle2)
-
-            # Visualize angle
-            cv2.putText(image, str(int(angle1)),
-                        tuple(np.multiply(shoulder1, [640, 480]).astype(int)),
-                        cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,
-                                                        255, 255), 2, cv2.LINE_AA
-                        )
-
-            cv2.putText(image, str(int(angle2)),
-                        tuple(np.multiply(shoulder2, [640, 480]).astype(int)),
-                        cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,
-                                                        255, 255), 2, cv2.LINE_AA
-                        )
-
-            cv2.putText(image, str(int(angle3)),
-                        tuple(np.multiply(hip1, [640, 480]).astype(int)),
-                        cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,
-                                                        255, 255), 2, cv2.LINE_AA
-                        )
-
-            cv2.putText(image, str(int(angle4)),
-                        tuple(np.multiply(hip2, [640, 480]).astype(int)),
-                        cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,
-                                                        255, 255), 2, cv2.LINE_AA
-                        )
-
-            # Curl counter logic
-            if angle1 < 30 and angle2 < 30 and angle3 > 170 and angle4 > 170:
-                stage = 'down'
-            if angle1 > 160 and angle2 > 160 and angle3 < 160 and angle4 < 160 and stage == 'down':
-                stage = 'up'
-                counter += 1
+            jumps, crouches = detect_movement(landmarks)
 
         except:
             pass
 
-        # Render curl counter
-        # Setup status box
-        cv2.rectangle(image, (0, 0), (270, 73), (245, 117, 16), -1)
-
-        # REP Data
-        cv2.putText(image, 'REPS', (15, 12),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-        cv2.putText(image, str(counter), (10, 60),
-                    cv2.FONT_HERSHEY_COMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
-
-        # Stage Data
-        cv2.putText(image, 'STAGE', (90, 12),
-                    cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
-        cv2.putText(image, stage, (85, 60),
-                    cv2.FONT_HERSHEY_COMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
-
-        # Render detections
-        mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                                  mp_drawing.DrawingSpec(
-                                      color=(245, 117, 66), thickness=2, circle_radius=2),
-                                  mp_drawing.DrawingSpec(
-                                      color=(245, 66, 230), thickness=2, circle_radius=2)
-                                  )
-
-        cTime = time.time()
-        fps = 1/(cTime-pTime)
-        pTime = cTime
-
-        cv2.putText(image, str(int(fps)), (0, 180),
-                    cv2.FONT_HERSHEY_COMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
+        # Display jump and crouch count
+        cv2.putText(image, f'Jumps: {jumps}', (10, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(image, f'Crouches: {crouches}', (10, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
         cv2.imshow('Mediapipe Feed', image)
 
