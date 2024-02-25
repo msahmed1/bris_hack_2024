@@ -1,3 +1,13 @@
+# import, set up 'correct' paths for silicon macs 
+import os
+home_dir = os.path.expanduser("~")
+camera_optn = 0
+
+if home_dir == "/Users/nat":
+    mediapipe_dylibs_path = "/Users/nat/Documents/coding/bris_hack_2024/venv/lib/python3.9/site-packages/mediapipe/.dylibs"
+    os.environ["DYLD_LIBRARY_PATH"] = mediapipe_dylibs_path + ":" + os.environ.get("DYLD_LIBRARY_PATH", "")
+    camera_optn = 1
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -13,6 +23,15 @@ jump_counter = 0
 
 previous_frame_crouch = False
 crouch_counter = 0
+
+def draw_connections(image, landmarks):
+    # Render detections
+    mp_drawing.draw_landmarks(image, landmarks, mp_pose.POSE_CONNECTIONS,
+                        mp_drawing.DrawingSpec(
+                            color=(245, 117, 66), thickness=2, circle_radius=2),
+                        mp_drawing.DrawingSpec(
+                            color=(245, 66, 230), thickness=2, circle_radius=2)
+                        )
 
 
 def detect_movement(landmarks):
@@ -50,7 +69,7 @@ def detect_movement(landmarks):
 
 
 # Video Feed
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(camera_optn)
 
 # Initialize jumps and crouches before the try block
 jumps, crouches = 0, 0
@@ -85,6 +104,8 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
         cv2.putText(image, f'Crouches: {crouches}', (10, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
+        draw_connections(image, results.pose_landmarks)
+        
         cv2.imshow('Mediapipe Feed', image)
 
         if cv2.waitKey(10) & 0xFF == ord('q'):
