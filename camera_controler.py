@@ -9,12 +9,13 @@ mp_pose = mp.solutions.pose
 # Initialization
 previous_shoulder_y = 0  # Assuming starting in a standing position
 jump_in_progress = False
+crouch_in_progress = False
 jump_counter = 0
 crouch_counter = 0
 
 
 def detect_movement(landmarks):
-    global previous_shoulder_y, jump_in_progress, jump_counter, crouch_counter
+    global previous_shoulder_y, jump_in_progress, jump_counter, crouch_in_progress, crouch_counter
 
     # Calculate the average y-coordinate of both shoulders
     shoulder_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
@@ -33,9 +34,16 @@ def detect_movement(landmarks):
 
     # Calculate the distance between shoulders and ankles
     distance = ankle_y - shoulder_y
+
+    croushc_threshold = 0.5
+
     # Detect crouch (significant downward movement)
     # Assuming a lower threshold indicates a crouch
-    if distance < 0.8:
+    if not crouch_in_progress and distance < croushc_threshold:
+        crouch_in_progress = True
+    # And define stand_threshold for when you consider the crouch to be over
+    elif crouch_in_progress and distance > croushc_threshold:
+        crouch_in_progress = False
         crouch_counter += 1
 
     previous_shoulder_y = shoulder_y
