@@ -6,24 +6,21 @@ import time
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# Initialization
-previous_shoulder_y = 0  # Assuming starting in a standing position
+# Initialisation
+previous_shoulder_y = 0
 jump_in_progress = False
-crouch_in_progress = False
 jump_counter = 0
+
+previous_frame_crouch = False
 crouch_counter = 0
 
 
 def detect_movement(landmarks):
-    global previous_shoulder_y, jump_in_progress, jump_counter, crouch_in_progress, crouch_counter
+    global previous_shoulder_y, jump_in_progress, jump_counter, previous_frame_crouch, crouch_counter
 
     # Calculate the average y-coordinate of both shoulders
     shoulder_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
                   landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
-
-    # Calculate the average y-coordinate of both ankles
-    ankle_y = (landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y +
-               landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y) / 2
 
     # Detect jump (significant upward movement)
     if not jump_in_progress and previous_shoulder_y - shoulder_y > 0.05:  # Threshold for jump start
@@ -32,21 +29,23 @@ def detect_movement(landmarks):
         jump_in_progress = False
         jump_counter += 1
 
-    # Calculate the distance between shoulders and ankles
-    distance = ankle_y - shoulder_y
+    previous_shoulder_y = shoulder_y
 
-    croushc_threshold = 0.5
+    # For crouch detection based on wrist below knee
+    left_wrist_y = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y
+    right_wrist_y = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y
+    left_knee_y = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y
+    right_knee_y = landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y
 
-    # Detect crouch (significant downward movement)
-    # Assuming a lower threshold indicates a crouch
-    if not crouch_in_progress and distance < croushc_threshold:
-        crouch_in_progress = True
-    # And define stand_threshold for when you consider the crouch to be over
-    elif crouch_in_progress and distance > croushc_threshold:
-        crouch_in_progress = False
+    # Check if either wrist is below either knee
+    crouch_detected = left_wrist_y > left_knee_y or right_wrist_y > right_knee_y
+
+    # Detect crouch as soon as it happens
+    if crouch_detected and not previous_frame_crouch:
         crouch_counter += 1
 
-    previous_shoulder_y = shoulder_y
+    previous_frame_crouch = crouch_detected
+
     return jump_counter, crouch_counter
 
 
