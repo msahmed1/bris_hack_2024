@@ -1,7 +1,52 @@
 import pygame
 import os
 import random
+import time
+import threading
+import paho.mqtt.client as mqtt
 pygame.init()
+
+# MQTT setup
+broker_address = 'localhost'  # Define broker address
+port = 1883  # Default MQTT port
+keepalive = 60  # Keepalive interval
+MQTT_TOPIC = "robot/userInput"
+
+userInput = ''
+
+
+def on_connect(client, userdata, flags, rc):
+    # Subscribe to the desired topic upon connecting with the broker
+    print("Connected with result code " + str(rc))
+    client.subscribe(MQTT_TOPIC)
+
+# Define on_message event Handler
+
+
+def on_message(client, userdata, msg):
+    global userInput  # Declare userInput as global within the function
+    # Print the received message
+    print(
+        f"Message received: Topic: {msg.topic}, Message: {str(msg.payload.decode('utf-8'))}")
+    message = str(msg.payload.decode('utf-8'))
+    if message == "up":
+        userInput = "up"
+    elif message == "down":
+        userInput = "down"
+
+
+mqtt_client = mqtt.Client()  # Create MQTT client
+
+# Assign event callbacks
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
+
+# Connect to the MQTT broker
+mqtt_client.connect(broker_address, port, keepalive)
+# Start the loop in a separate thread
+threading.Thread(target=mqtt_client.loop_forever).start()
+
+update_counter = 0
 
 # Global Constants
 SCREEN_HEIGHT = 600
@@ -17,10 +62,12 @@ DUCKING = [pygame.image.load(os.path.join("Assets/Dino", "DinoDuck1.png")),
            pygame.image.load(os.path.join("Assets/Dino", "DinoDuck2.png"))]
 
 SMALL_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus1.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus2.png")),
+                pygame.image.load(os.path.join(
+                    "Assets/Cactus", "SmallCactus2.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus3.png"))]
 LARGE_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus1.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus2.png")),
+                pygame.image.load(os.path.join(
+                    "Assets/Cactus", "LargeCactus2.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus3.png"))]
 
 BIRD = [pygame.image.load(os.path.join("Assets/Bird", "Bird1.png")),
@@ -53,7 +100,11 @@ class Dinosaur:
         self.dino_rect.x = self.X_POS
         self.dino_rect.y = self.Y_POS
 
-    def update(self, userInput):
+    def update(self, keyInputs):
+        global userInput
+        # This is still required if you access userInput directly without the getter function
+        print("in update, userInput: ", userInput)
+
         if self.dino_duck:
             self.duck()
         if self.dino_run:
@@ -64,15 +115,17 @@ class Dinosaur:
         if self.step_index >= 10:
             self.step_index = 0
 
-        if userInput[pygame.K_UP] and not self.dino_jump:
+        if (userInput == "up" or keyInputs[pygame.K_UP]) and not self.dino_jump:
             self.dino_duck = False
             self.dino_run = False
             self.dino_jump = True
-        elif userInput[pygame.K_DOWN] and not self.dino_jump:
+            userInput = "standing"
+        elif (userInput == "down" or keyInputs[pygame.K_DOWN]) and not self.dino_jump:
             self.dino_duck = True
             self.dino_run = False
             self.dino_jump = False
-        elif not (self.dino_jump or userInput[pygame.K_DOWN]):
+            userInput = "standing"
+        elif not (self.dino_jump or userInput == "standing"):
             self.dino_duck = False
             self.dino_run = True
             self.dino_jump = False
@@ -103,8 +156,6 @@ class Dinosaur:
 
     def draw(self, SCREEN):
         SCREEN.blit(self.image, (self.dino_rect.x, self.dino_rect.y))
-
-    
 
 
 class Cloud:
@@ -174,7 +225,7 @@ def main():
     clock = pygame.time.Clock()
     player = Dinosaur()
     cloud = Cloud()
-    game_speed = 20
+    game_speed = 15
     x_pos_bg = 0
     y_pos_bg = 380
     points = 0
@@ -186,7 +237,7 @@ def main():
         global points, game_speed
         points += 1
         if points % 100 == 0:
-            game_speed += 1
+            game_speed += 5
 
         text = font.render("Points: " + str(points), True, (0, 0, 0))
         textRect = text.get_rect()
@@ -209,10 +260,11 @@ def main():
                 run = False
 
         SCREEN.fill((255, 255, 255))
-        userInput = pygame.key.get_pressed()
+
+        keyInputs = pygame.key.get_pressed()
 
         player.draw(SCREEN)
-        player.update(userInput)
+        player.update(keyInputs)
 
         if len(obstacles) == 0:
             if random.randint(0, 2) == 0:
@@ -259,12 +311,14 @@ def menu(death_count):
         textRect = text.get_rect()
         textRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         SCREEN.blit(text, textRect)
-        SCREEN.blit(RUNNING[0], (SCREEN_WIDTH // 2 - 20, SCREEN_HEIGHT // 2 - 140))
+        SCREEN.blit(RUNNING[0], (SCREEN_WIDTH // 2 -
+                    20, SCREEN_HEIGHT // 2 - 140))
         pygame.display.update()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
             if event.type == pygame.KEYDOWN:
+                time.sleep(2)
                 main()
 
 
