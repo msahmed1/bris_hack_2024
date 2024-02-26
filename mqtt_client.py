@@ -10,6 +10,7 @@ MQTT_TOPIC = "userInput"
 
 class MQTTClient:
     def __init__(self):
+        self.latest_message = "standing"
         self.mqtt_client = mqtt.Client()
 
         # Assign event callbacks
@@ -23,21 +24,25 @@ class MQTTClient:
         threading.Thread(target=self.mqtt_client.loop_forever).start()
 
     def publish_state(self, message):
-        self.mqtt_client.publish("robot/userInput", message)
+        self.mqtt_client.publish(MQTT_TOPIC, message)
 
     # Subscribe to the desired topic upon connecting with the broker
     def on_connect(self, client, userdata, flags, rc):
         # print("Connected with result code " + str(rc))
         self.mqtt_client.subscribe(MQTT_TOPIC)
+    
+    def on_message(self, client, userdata, msg):
+        self.latest_message = str(msg.payload.decode('utf-8'))
+        # print(f"Message received: {self.latest_message}")
 
-    # Define on_message event Handler
-    def on_message(self, msg):
-        # print(f"Message received: Topic: {msg.topic}, Message: {str(msg.payload.decode('utf-8'))}")
-        message = str(msg.payload.decode('utf-8'))
-        if message == "up":
+    def get_latest_message(self):
+        print("in get_latest_message, latest_message: ", self.latest_message)
+        if self.latest_message == "up":
             return "up"
-        elif message == "down":
+        elif self.latest_message == "down":
             return "down"
+        else:
+            return "standing"
 
     def disconnect(self):
         self.mqtt_client.loop_stop()
