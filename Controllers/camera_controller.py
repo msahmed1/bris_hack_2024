@@ -123,9 +123,9 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
             pass
 
         # Display jump and crouch count for debugging
-        cv2.putText(image, f'Jumps: {jump_counter}', (10, 50),
+        cv2.putText(resized_image, f'Jumps: {jump_counter}', (10, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(image, f'Crouches: {crouch_counter}', (10, 100),
+        cv2.putText(resized_image, f'Crouches: {crouch_counter}', (10, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
         draw_connections(resized_image, results.pose_landmarks)
