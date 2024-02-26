@@ -32,6 +32,7 @@ PIPE_GAP = 120  # Gap between the top and bottom pipes
 PIPE_INTERVAL = 1500  # Milliseconds between new pipes
 PIPE_SPEED_START = 6
 PIPE_EDGE_MARGIN = 50
+PIPE_MAX_HEIGHT = SCREEN_HEIGHT - PIPE_EDGE_MARGIN - PIPE_GAP
 
 BIRD_WIDTH = 30
 BIRD_HEIGHT = 30
@@ -48,9 +49,19 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 # set global vars
 bird_image = pygame.image.load("assets/bird.png")
 bird_image = pygame.transform.scale(bird_image, (BIRD_WIDTH, BIRD_HEIGHT))
-bird_y = 0
-
 background_image = pygame.image.load("assets/flappy_bg.png")
+
+bot_pipe_img = pygame.image.load('assets/bot_pipe.png')
+original_width, original_height = bot_pipe_img.get_size()
+bot_pipe_img = pygame.transform.scale(bot_pipe_img, (30, PIPE_MAX_HEIGHT))
+bot_pipe_img_w, bot_pipe_img_h = bot_pipe_img.get_size()
+
+top_pipe_img = pygame.image.load('assets/top_pipe.png')
+original_width, original_height = top_pipe_img.get_size()
+top_pipe_img = pygame.transform.scale(top_pipe_img, (30, PIPE_MAX_HEIGHT))
+top_pipe_img_w, top_pipe_img_h = top_pipe_img.get_size()
+
+bird_y = 0
 pipes = [] # pipes stored in format - (x coord, height, is_scored)
 last_pipe_time = 0
 score = 0
@@ -61,6 +72,7 @@ person = None
 pipe_speed_up_coro = None
 pipe_speed = PIPE_SPEED_START
 top_score_name = ""
+last_loss_time = 0
 
 async def speed_up():
     try:
@@ -73,15 +85,19 @@ async def speed_up():
 
 
 def on_collision():
-    global pipe_speed
+    global pipe_speed, last_loss_time
+
     pipe_speed = PIPE_SPEED_START
     pipe_speed_up_coro.cancel()
+    last_loss_time = time.time()
 
-    player_name = do_gameover()  # Get player name and show game over screen
+    player_name = do_gameover_screen()  # Get player name and show game over screen
     print(f"got name: {player_name}")
 
     if player_name is not None:
-        update_scores(player_name, score)
+        if player_name != "":
+            update_scores(player_name, score)
+        
         return True  # Indicate that player wants to restart
     else:
         return False  # Indicate game end
@@ -133,9 +149,9 @@ def draw():
     print("drawing screen…")
     screen.fill((255, 255, 255))  # clear screen
     
-    draw_bird()
     draw_pipes()
     draw_score()
+    draw_bird()
     draw_top_score()
     
     pygame.display.update()
@@ -191,7 +207,7 @@ def check_collisions_scores():
             score += 1
             pipe_new = (pipe[0], pipe[1], True)
             pipes[i] = pipe_new
-            
+
 
 def generate_pipes():
     """
@@ -265,7 +281,7 @@ def get_top_score():
     return top_name, top_score 
 
 
-def do_gameover():
+def do_gameover_screen():
     box_width, box_height = 300, 200
     box_x, box_y = (screen.get_width() - box_width) // 2, (screen.get_height() - box_height) // 2
     input_box = pygame.Rect(box_x + 50, box_y + 140, 200, 36)
@@ -292,7 +308,7 @@ def do_gameover():
                         return name
                     elif event.key == pygame.K_BACKSPACE:
                         name = name[:-1]
-                    else:
+                    elif len(name) <=2:
                         name += event.unicode
 
         draw_bird()
@@ -313,7 +329,7 @@ def do_gameover():
 
         # display top score
         top_score_surface = font.render(f"Top Score: {top_score} by {top_score_name}", True, (0, 0, 0))
-        screen.blit(top_score_surface, (box_x + 50, box_y + 100))
+        screen.blit(top_score_surface, (box_x + 5, box_y + 100))
 
         # name input
         txt_surface = font.render(name, True, color)
@@ -323,16 +339,17 @@ def do_gameover():
         pygame.display.flip()
         print("rendered game over")
 
-        # check if person has crouched
+        # check if person has crouched and wants to restart
         res = person.get_landmarks()
         if res is None:
             print(f"no significant landmarks, kept height at {bird_y}")
-            return
+            continue
+
         landmarks = res[0]
 
         player_pos = person.get_player_height(landmarks.landmark)
 
-        if player_pos > 0.5:
+        if player_pos > 0.5 and int(time.time()) > last_loss_time + 3:
             return name
         
 
@@ -340,10 +357,22 @@ def draw_pipes():
     screen.blit(background_image, (0, 0))
     for x, height, _ in pipes:
         # draw top pipe
-        pygame.draw.rect(screen, (0, 0, 0), (x, 0, PIPE_WIDTH, height))
+        screen.blit(top_pipe_img, (x, height-top_pipe_img_h))
 
         # draw bottom pipe
-        pygame.draw.rect(screen, (0, 0, 0), (x, height + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT - PIPE_GAP - height))
+        # pygame.draw.rect(screen, (0, 0, 0), (x, height + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT - PIPE_GAP - height))
+        screen.blit(bot_pipe_img, (x, height+PIPE_GAP))
+
+
+
+# def draw_pipes():
+#     screen.blit(background_image, (0, 0))
+#     for x, height, _ in pipes:
+#         # draw top pipe
+#         pygame.draw.rect(screen, (0, 0, 0), (x, 0, PIPE_WIDTH, height))
+
+#         # draw bottom pipe
+#         pygame.draw.rect(screen, (0, 0, 0), (x, height + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT - PIPE_GAP - height))
 
 
 async def game_loop():
