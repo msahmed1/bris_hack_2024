@@ -56,11 +56,11 @@ def detect_jumping(landmarks):
                   landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
 
     # Detect jump when shoulder moves up quickly compared to previous frame
-    threshold=0.05
+    threshold=0.04
     if not jump_in_progress and previous_shoulder_y - shoulder_y > threshold:  # Threshold for jump start
         jump_in_progress = True
-        mqtt_client.publish_state('up')
-        print("jump detected")
+        mqtt_client.publish_state("userInput",'up')
+        # print("jump detected")
     elif jump_in_progress and shoulder_y - previous_shoulder_y > threshold:  # Threshold for jump end
         jump_in_progress = False
         jump_counter += 1
@@ -80,14 +80,15 @@ def detect_crouching(landmarks):
 
     if crouch_detected and not previous_frame_crouch:
         crouch_counter += 1
-        mqtt_client.publish_state('down')
-        print("crouch detected")
+        mqtt_client.publish_state("userInput",'down')
+    
     previous_frame_crouch = crouch_detected
 
 def detect_standing(landmarks):
     global previous_frame_standing, standing_detected
 
     # Detect standing when shoulders are above hips and hips are above knees
+    # TODO: maybe change this to be wrist are close to hips as this may be more accurate
     shoulder_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
                   landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
     hip_y = (landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y +
@@ -98,8 +99,8 @@ def detect_standing(landmarks):
     standing_detected = shoulder_y < hip_y < knee_y and not jump_in_progress # and (knee_y - shoulder_y) > some_threshold:
 
     if standing_detected and not previous_frame_standing:  
-        mqtt_client.publish_state('standing')
-        print("standing detected")
+        mqtt_client.publish_state("userInput",'standing')
+        # print("standing detected")
 
     previous_frame_standing = standing_detected
 
@@ -127,8 +128,8 @@ def detect_stationary(landmarks):
     is_stationary = max_delta < threshold
 
     if is_stationary and not previous_frame_stationary:
-        mqtt_client.publish_state('standing')
-        print("stationary detected")
+        mqtt_client.publish_state("userInput",'standing')
+        # print("stationary detected")
     
     previous_frame_stationary = is_stationary
 
@@ -162,8 +163,8 @@ def detect_start_pose(landmarks):
     in_start_pose = abs(90 - left_angle) < angle_threshold and abs(90 - right_angle) < angle_threshold
     
     if in_start_pose and not previous_frame_in_start_pose:
-        mqtt_client.publish_state('start_pose')
-        print("Start pose detected")
+        mqtt_client.publish_state("userInput",'start_pose')
+        # print("Start pose detected")
     
     previous_frame_in_start_pose = in_start_pose
 
@@ -195,8 +196,8 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
             landmarks = results.pose_landmarks.landmark
             detect_crouching(landmarks)
             detect_jumping(landmarks)
-            # detect_standing(landmarks)
-            detect_stationary(landmarks)
+            detect_standing(landmarks)
+            # detect_stationary(landmarks)
             detect_start_pose(landmarks)
         except:
             pass
