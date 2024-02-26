@@ -6,11 +6,12 @@ broker_address = 'localhost'  # Define broker address
 port = 1883  # Default MQTT port
 keepalive = 60  # Keepalive interval
 MQTT_TOPIC = "userInput"
+topics = ["userInput", "acknowldege"] 
 
 
 class MQTTClient:
     def __init__(self):
-        self.latest_message = "standing"
+        self.latest_messages = {"userInput": None, "acknowledge": None}
         self.mqtt_client = mqtt.Client()
 
         # Assign event callbacks
@@ -23,8 +24,12 @@ class MQTTClient:
         # Start the loop in a separate thread
         threading.Thread(target=self.mqtt_client.loop_forever).start()
 
-    def publish_state(self, message):
-        self.mqtt_client.publish(MQTT_TOPIC, message)
+    def publish_state(self, topic, message):
+        print(f"Publishing message: {message} to topic: {topic}")
+        if topic in self.latest_messages:  # Check if it's a valid topic
+            self.mqtt_client.publish(topic, message)
+        else:
+            print(f"Invalid topic: {topic}")
 
     # Subscribe to the desired topic upon connecting with the broker
     def on_connect(self, client, userdata, flags, rc):
@@ -32,17 +37,17 @@ class MQTTClient:
         self.mqtt_client.subscribe(MQTT_TOPIC)
     
     def on_message(self, client, userdata, msg):
-        self.latest_message = str(msg.payload.decode('utf-8'))
-        # print(f"Message received: {self.latest_message}")
+        self.latest_messages[msg.topic] = msg.payload.decode('utf-8')
+        print(f"Message received: {msg.payload.decode('utf-8')}")
 
-    def get_latest_message(self):
-        print("in get_latest_message, latest_message: ", self.latest_message)
-        if self.latest_message == "up":
-            return "up"
-        elif self.latest_message == "down":
-            return "down"
+    def get_latest_message(self, topic):
+        if topic in self.latest_messages:
+            latest_message = self.latest_messages[topic]
+            print(f"in get_latest_message for {topic}, latest_message: {latest_message}")
+            return latest_message
         else:
-            return "standing"
+            print(f"Invalid topic: {topic}")
+            return None
 
     def disconnect(self):
         self.mqtt_client.loop_stop()
