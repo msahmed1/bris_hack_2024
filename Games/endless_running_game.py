@@ -2,49 +2,15 @@ import pygame
 import os
 import random
 import time
-import threading
-import paho.mqtt.client as mqtt
+import sys
+import os
+# Add the root directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from mqtt_client import MQTTClient
 pygame.init()
 
 # MQTT setup
-broker_address = 'localhost'  # Define broker address
-port = 1883  # Default MQTT port
-keepalive = 60  # Keepalive interval
-MQTT_TOPIC = "robot/userInput"
-
-userInput = ''
-
-
-def on_connect(client, userdata, flags, rc):
-    # Subscribe to the desired topic upon connecting with the broker
-    print("Connected with result code " + str(rc))
-    client.subscribe(MQTT_TOPIC)
-
-# Define on_message event Handler
-
-
-def on_message(client, userdata, msg):
-    global userInput  # Declare userInput as global within the function
-    # Print the received message
-    print(
-        f"Message received: Topic: {msg.topic}, Message: {str(msg.payload.decode('utf-8'))}")
-    message = str(msg.payload.decode('utf-8'))
-    if message == "up":
-        userInput = "up"
-    elif message == "down":
-        userInput = "down"
-
-
-mqtt_client = mqtt.Client()  # Create MQTT client
-
-# Assign event callbacks
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
-
-# Connect to the MQTT broker
-mqtt_client.connect(broker_address, port, keepalive)
-# Start the loop in a separate thread
-threading.Thread(target=mqtt_client.loop_forever).start()
+mqtt_client =  MQTTClient()
 
 update_counter = 0
 
@@ -54,28 +20,28 @@ SCREEN_WIDTH = 1100
 SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
 # Adding image for running
-RUNNING = [pygame.image.load(os.path.join("Assets/Dino", "DinoRun1.png")),
-           pygame.image.load(os.path.join("Assets/Dino", "DinoRun2.png"))]
+RUNNING = [pygame.image.load(os.path.join("../Assets/Dino", "DinoRun1.png")),
+           pygame.image.load(os.path.join("../Assets/Dino", "DinoRun2.png"))]
 
-JUMPING = pygame.image.load(os.path.join("Assets/Dino", "DinoJump.png"))
-DUCKING = [pygame.image.load(os.path.join("Assets/Dino", "DinoDuck1.png")),
-           pygame.image.load(os.path.join("Assets/Dino", "DinoDuck2.png"))]
+JUMPING = pygame.image.load(os.path.join("../Assets/Dino", "DinoJump.png"))
+DUCKING = [pygame.image.load(os.path.join("../Assets/Dino", "DinoDuck1.png")),
+           pygame.image.load(os.path.join("../Assets/Dino", "DinoDuck2.png"))]
 
-SMALL_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus1.png")),
+SMALL_CACTUS = [pygame.image.load(os.path.join("../Assets/Cactus", "SmallCactus1.png")),
                 pygame.image.load(os.path.join(
-                    "Assets/Cactus", "SmallCactus2.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus3.png"))]
-LARGE_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus1.png")),
+                    "../Assets/Cactus", "SmallCactus2.png")),
+                pygame.image.load(os.path.join("../Assets/Cactus", "SmallCactus3.png"))]
+LARGE_CACTUS = [pygame.image.load(os.path.join("../Assets/Cactus", "LargeCactus1.png")),
                 pygame.image.load(os.path.join(
-                    "Assets/Cactus", "LargeCactus2.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus3.png"))]
+                    "../Assets/Cactus", "LargeCactus2.png")),
+                pygame.image.load(os.path.join("../Assets/Cactus", "LargeCactus3.png"))]
 
-BIRD = [pygame.image.load(os.path.join("Assets/Bird", "Bird1.png")),
-        pygame.image.load(os.path.join("Assets/Bird", "Bird2.png"))]
+BIRD = [pygame.image.load(os.path.join("../Assets/Bird", "Bird1.png")),
+        pygame.image.load(os.path.join("../Assets/Bird", "Bird2.png"))]
 
-CLOUD = pygame.image.load(os.path.join("Assets/Other", "Cloud.png"))
+CLOUD = pygame.image.load(os.path.join("../Assets/Other", "Cloud.png"))
 
-BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
+BG = pygame.image.load(os.path.join("../Assets/Other", "Track.png"))
 
 
 class Dinosaur:
@@ -101,9 +67,9 @@ class Dinosaur:
         self.dino_rect.y = self.Y_POS
 
     def update(self, keyInputs):
-        global userInput
+        userInput = mqtt_client.get_latest_message()
         # This is still required if you access userInput directly without the getter function
-        print("in update, userInput: ", userInput)
+        # print("in update, userInput: ", userInput)
 
         if self.dino_duck:
             self.duck()
