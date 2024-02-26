@@ -12,12 +12,32 @@ pygame.init()
 # MQTT setup
 mqtt_client =  MQTTClient()
 
-update_counter = 0
+os.environ['SDL_VIDEO_WINDOW_POS'] = '112,83'
 
+pygame.init()
+pygame.mixer.init()
 # Global Constants
+TITLE = 'RUN FOR FUN'
+
 SCREEN_HEIGHT = 600
 SCREEN_WIDTH = 1100
-SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+SCREEN_COLOR = (255, 255, 255)
+
+
+GAME_SPEED = 10
+# BIRDS = True
+BORDER = False
+
+#Increase this to make the game eazy(collision variable)
+dict_ = {10:30, 15:30, 20:40, 25:40, 30:50, 35:50, 40:60}
+def get_collision_distance_diff(speed):
+    for i, j in dict_.items():
+        if int(i) >= int(speed):
+            return j
+
+
+pygame.display.set_caption(TITLE)
 
 # Adding image for running
 RUNNING = [pygame.image.load(os.path.join("../Assets/Dino", "DinoRun1.png")),
@@ -28,12 +48,10 @@ DUCKING = [pygame.image.load(os.path.join("../Assets/Dino", "DinoDuck1.png")),
            pygame.image.load(os.path.join("../Assets/Dino", "DinoDuck2.png"))]
 
 SMALL_CACTUS = [pygame.image.load(os.path.join("../Assets/Cactus", "SmallCactus1.png")),
-                pygame.image.load(os.path.join(
-                    "../Assets/Cactus", "SmallCactus2.png")),
+                pygame.image.load(os.path.join("../Assets/Cactus", "SmallCactus2.png")),
                 pygame.image.load(os.path.join("../Assets/Cactus", "SmallCactus3.png"))]
 LARGE_CACTUS = [pygame.image.load(os.path.join("../Assets/Cactus", "LargeCactus1.png")),
-                pygame.image.load(os.path.join(
-                    "../Assets/Cactus", "LargeCactus2.png")),
+                pygame.image.load(os.path.join("../Assets/Cactus", "LargeCactus2.png")),
                 pygame.image.load(os.path.join("../Assets/Cactus", "LargeCactus3.png"))]
 
 BIRD = [pygame.image.load(os.path.join("../Assets/Bird", "Bird1.png")),
@@ -43,12 +61,36 @@ CLOUD = pygame.image.load(os.path.join("../Assets/Other", "Cloud.png"))
 
 BG = pygame.image.load(os.path.join("../Assets/Other", "Track.png"))
 
+def play_menu_music():
+    pygame.mixer.music.load(os.path.join("../Assets/Audio", "music.ogg"))
+    pygame.mixer.music.play(-1)  # -1 makes the music loop indefinitely
+
+# Function to play game music
+def play_game_music():
+    pygame.mixer.music.load(os.path.join("../Assets/Audio", "menu.mp3"))
+    pygame.mixer.music.play(-1)  # -1 makes the music loop indefinitely
+
+def play_dead_music():
+    pygame.mixer.music.load(os.path.join("../Assets/Audio", "dead.mp3"))
+    pygame.mixer.music.play(1)  # -1 makes the music loop indefinitely
+
+def play_dragon_music():
+    bird_sound = pygame.mixer.Sound(os.path.join("../Assets/Audio", "dragon.mp3"))
+    bird_sound.play()
+
+def play_jump_music():
+    jump_sound = pygame.mixer.Sound(os.path.join("../Assets/Audio", "jump.mp3"))
+    jump_sound.play()
+
+def play_slide_music():
+    jump_sound = pygame.mixer.Sound(os.path.join("../Assets/Audio", "slide.mp3"))
+    jump_sound.play()
 
 class Dinosaur:
     X_POS = 80
     Y_POS = 310
     Y_POS_DUCK = 340
-    JUMP_VEL = 8.5
+    JUMP_VEL = 12
 
     def __init__(self):
         self.duck_img = DUCKING
@@ -65,16 +107,20 @@ class Dinosaur:
         self.dino_rect = self.image.get_rect()
         self.dino_rect.x = self.X_POS
         self.dino_rect.y = self.Y_POS
+        self.jump_sound = False
+        self.duck_sound = False
 
-    def update(self, keyInputs):
-        userInput = mqtt_client.get_latest_message()
+    def update(self, keyInputs, speed):
+        userInput = mqtt_client.get_latest_message("userInput")
+        if userInput == None:
+            userInput = "standing"
         # This is still required if you access userInput directly without the getter function
-        # print("in update, userInput: ", userInput)
+        print(userInput)
 
         if self.dino_duck:
-            self.duck()
+            self.duck(speed)
         if self.dino_run:
-            self.run()
+            self.run(speed)
         if self.dino_jump:
             self.jump()
 
@@ -85,30 +131,31 @@ class Dinosaur:
             self.dino_duck = False
             self.dino_run = False
             self.dino_jump = True
-            userInput = "standing"
         elif (userInput == "down" or keyInputs[pygame.K_DOWN]) and not self.dino_jump:
             self.dino_duck = True
             self.dino_run = False
             self.dino_jump = False
-            userInput = "standing"
-        elif not (self.dino_jump or userInput == "standing"):
+        elif not (self.dino_jump or keyInputs[pygame.K_DOWN]) and userInput == "standing":
             self.dino_duck = False
             self.dino_run = True
             self.dino_jump = False
 
-    def duck(self):
+    def duck(self, speed):
         self.image = self.duck_img[self.step_index // 5]
         self.dino_rect = self.image.get_rect()
         self.dino_rect.x = self.X_POS
         self.dino_rect.y = self.Y_POS_DUCK
+        self.dino_rect.width -= get_collision_distance_diff(speed)
         self.step_index += 1
+        self.duck_sound = True
 
-    def run(self):
-        print(self.step_index // 5)
+    def run(self, speed):
         self.image = self.run_img[self.step_index // 5]
         self.dino_rect = self.image.get_rect()
         self.dino_rect.x = self.X_POS
         self.dino_rect.y = self.Y_POS
+        self.dino_rect.width -= get_collision_distance_diff(speed)
+        self.dino_rect.height -= get_collision_distance_diff(speed)
         self.step_index += 1
 
     def jump(self):
@@ -119,8 +166,17 @@ class Dinosaur:
         if self.jump_vel < - self.JUMP_VEL:
             self.dino_jump = False
             self.jump_vel = self.JUMP_VEL
+        self.jump_sound = True
 
     def draw(self, SCREEN):
+        if BORDER:
+            pygame.draw.rect(SCREEN, (125, 255, 0), self.dino_rect, 2)
+        if self.jump_sound:
+            play_jump_music()
+            self.jump_sound = False
+        if self.duck_sound:
+            play_slide_music()
+            self.duck_sound = False
         SCREEN.blit(self.image, (self.dino_rect.x, self.dino_rect.y))
 
 
@@ -154,6 +210,8 @@ class Obstacle:
             obstacles.pop()
 
     def draw(self, SCREEN):
+        if BORDER:
+            pygame.draw.rect(SCREEN, (125, 255, 100), self.rect, 2)
         SCREEN.blit(self.image[self.type], self.rect)
 
 
@@ -181,17 +239,22 @@ class Bird(Obstacle):
     def draw(self, SCREEN):
         if self.index >= 9:
             self.index = 0
+        play_dragon_music()
+        if BORDER:
+            pygame.draw.rect(SCREEN, (125, 255, 100), self.rect, 2)
         SCREEN.blit(self.image[self.index//5], self.rect)
         self.index += 1
 
 
-def main():
+def main(SCREEN, BIRDS, TITLE):
     global game_speed, x_pos_bg, y_pos_bg, points, obstacles
+    
+    play_game_music()
     run = True
     clock = pygame.time.Clock()
     player = Dinosaur()
     cloud = Cloud()
-    game_speed = 15
+    game_speed = GAME_SPEED
     x_pos_bg = 0
     y_pos_bg = 380
     points = 0
@@ -203,7 +266,7 @@ def main():
         global points, game_speed
         points += 1
         if points % 100 == 0:
-            game_speed += 5
+            game_speed += 1
 
         text = font.render("Points: " + str(points), True, (0, 0, 0))
         textRect = text.get_rect()
@@ -225,12 +288,11 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
 
-        SCREEN.fill((255, 255, 255))
-
+        SCREEN.fill(SCREEN_COLOR)
         keyInputs = pygame.key.get_pressed()
 
         player.draw(SCREEN)
-        player.update(keyInputs)
+        player.update(keyInputs, game_speed)
 
         if len(obstacles) == 0:
             if random.randint(0, 2) == 0:
@@ -238,15 +300,22 @@ def main():
             elif random.randint(0, 2) == 1:
                 obstacles.append(LargeCactus(LARGE_CACTUS))
             elif random.randint(0, 2) == 2:
-                obstacles.append(Bird(BIRD))
+                if BIRDS:
+                    obstacles.append(Bird(BIRD))
 
         for obstacle in obstacles:
             obstacle.draw(SCREEN)
             obstacle.update()
+            # print(player.dino_rect)
             if player.dino_rect.colliderect(obstacle.rect):
+            # if precise_collision(player.dino_rect, obstacle.rect):
+                play_dead_music()
+                # print(player.dino_rect, obstacle.rect)
+                # pygame.draw.rect(SCREEN, (125, 0, 0), player.dino_rect, 2)
                 pygame.time.delay(2000)
+                
                 death_count += 1
-                menu(death_count)
+                menu(death_count, SCREEN, BIRDS=BIRDS, TITLE=TITLE)
 
         background()
 
@@ -259,17 +328,21 @@ def main():
         pygame.display.update()
 
 
-def menu(death_count):
+def menu(death_count, SCREEN, BIRDS, TITLE):
     global points
+    play_menu_music()
     run = True
     while run:
-        SCREEN.fill((255, 255, 255))
+        SCREEN.fill(SCREEN_COLOR)
         font = pygame.font.Font('freesansbold.ttf', 30)
-
+        text = font.render(TITLE, True, (0, 0, 0))
+        textRect = text.get_rect()
+        textRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2-200)
+        SCREEN.blit(text, textRect)
         if death_count == 0:
-            text = font.render("Press any Key to Start", True, (0, 0, 0))
+            text = font.render("Press SpaceBar to Start", True, (0, 0, 0))
         elif death_count > 0:
-            text = font.render("Press any Key to Restart", True, (0, 0, 0))
+            text = font.render("Press SpaceBar to Restart", True, (0, 0, 0))
             score = font.render("Your Score: " + str(points), True, (0, 0, 0))
             scoreRect = score.get_rect()
             scoreRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
@@ -277,15 +350,19 @@ def menu(death_count):
         textRect = text.get_rect()
         textRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         SCREEN.blit(text, textRect)
-        SCREEN.blit(RUNNING[0], (SCREEN_WIDTH // 2 -
-                    20, SCREEN_HEIGHT // 2 - 140))
+        SCREEN.blit(RUNNING[0], (SCREEN_WIDTH // 2 - 20, SCREEN_HEIGHT // 2 - 140))
         pygame.display.update()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
             if event.type == pygame.KEYDOWN:
-                time.sleep(2)
-                main()
+                if event.key == pygame.K_SPACE:
+                    main(SCREEN, BIRDS=BIRDS, TITLE=TITLE)
+    pygame.quit()
 
+IMAGE_SIZE = 200
+SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+TITLE = 'RUN FOR FUN - JUMPING AND SQUATS'
+pygame.display.set_caption(TITLE)
 
-menu(death_count=0)
+menu(death_count=0, SCREEN=SCREEN, BIRDS=True, TITLE=TITLE)
