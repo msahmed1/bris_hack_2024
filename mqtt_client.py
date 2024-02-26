@@ -25,28 +25,28 @@ class MQTTClient:
         threading.Thread(target=self.mqtt_client.loop_forever).start()
 
     def publish_state(self, topic, message):
-        print(f"Publishing message: {message} to topic: {topic}")
+        # print(f"Publishing message: {message} to topic: {topic}")
         if topic in self.latest_messages:  # Check if it's a valid topic
             self.mqtt_client.publish(topic, message)
         else:
             print(f"Invalid topic: {topic}")
 
-    # Subscribe to the desired topic upon connecting with the broker
     def on_connect(self, client, userdata, flags, rc):
         # print("Connected with result code " + str(rc))
-        self.mqtt_client.subscribe(MQTT_TOPIC)
+        for topic in topics:
+            self.mqtt_client.subscribe(topic)
     
     def on_message(self, client, userdata, msg):
         self.latest_messages[msg.topic] = msg.payload.decode('utf-8')
-        print(f"Message received: {msg.payload.decode('utf-8')}")
+        # print(f"Message received: {msg.payload.decode('utf-8')}")
 
     def get_latest_message(self, topic):
         if topic in self.latest_messages:
             latest_message = self.latest_messages[topic]
-            print(f"in get_latest_message for {topic}, latest_message: {latest_message}")
+            # print(f"in get_latest_message for {topic}, latest_message: {latest_message}")
             return latest_message
         else:
-            print(f"Invalid topic: {topic}")
+            # print(f"Invalid topic: {topic}")
             return None
 
     def disconnect(self):
