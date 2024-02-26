@@ -48,7 +48,6 @@ def draw_skeleton_on_body(image, landmarks):
                                   color=(245, 66, 230), thickness=2, circle_radius=2)
                               )
 
-# Detect jumping
 def detect_jumping(landmarks):
     global previous_shoulder_y, jump_in_progress, jump_counter
 
@@ -57,11 +56,12 @@ def detect_jumping(landmarks):
                   landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
 
     # Detect jump when shoulder moves up quickly compared to previous frame
-    if not jump_in_progress and previous_shoulder_y - shoulder_y > 0.05:  # Threshold for jump start
+    threshold=0.05
+    if not jump_in_progress and previous_shoulder_y - shoulder_y > threshold:  # Threshold for jump start
         jump_in_progress = True
         mqtt_client.publish_state('up')
         print("jump detected")
-    elif jump_in_progress and shoulder_y - previous_shoulder_y > 0.05:  # Threshold for jump end
+    elif jump_in_progress and shoulder_y - previous_shoulder_y > threshold:  # Threshold for jump end
         jump_in_progress = False
         jump_counter += 1
 
@@ -84,7 +84,6 @@ def detect_crouching(landmarks):
         print("crouch detected")
     previous_frame_crouch = crouch_detected
 
-# detect standing
 def detect_standing(landmarks):
     global previous_frame_standing, standing_detected
 
@@ -104,7 +103,7 @@ def detect_standing(landmarks):
 
     previous_frame_standing = standing_detected
 
-def detect_stationary(landmarks, threshold=0.05):
+def detect_stationary(landmarks):
     # Check if landmarks have not moved significantly based on history.
     global history, previous_frame_stationary
 
@@ -113,18 +112,20 @@ def detect_stationary(landmarks, threshold=0.05):
     if not history:
         history.append(current_positions)
         return False
+    
     # Calculate deltas for each landmark comparing to the last frame
-    deltas = [((curr[0] - prev[0])**2 + (curr[1] - prev[1])**2)**0.5 for curr, prev in zip(current_positions, history[-1])]
+    # Compare x and y coordinates of each landmark to find the distance between the two points
+    deltas = [((current[0] - previous[0])**2 + (current[1] - previous[1])**2)**0.5 for current, previous in zip(current_positions, history[-1])]
     max_delta = max(deltas)
 
-    # Update history
     history.append(current_positions)
-    if len(history) > 4:  # Limit history length to 4 to manage memory
+    history_len_limit = 4
+    if len(history) > history_len_limit:
         history.pop(0)
 
+    threshold=0.05
     is_stationary = max_delta < threshold
 
-    # Check if the maximum movement delta is below the threshold
     if is_stationary and not previous_frame_stationary:
         mqtt_client.publish_state('standing')
         print("stationary detected")
@@ -132,22 +133,18 @@ def detect_stationary(landmarks, threshold=0.05):
     previous_frame_stationary = is_stationary
 
 def calculate_angle(point1, point2, point3):
-    """
-    Calculate the angle at point2 given points in the order: point1, point2, point3.
-    """
-    # Calculate the sides of the triangle
+    # Calculate the angle at point2 using the law of cosines given points in the order: point1, point2, point3.
     a = math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2)
     b = math.sqrt((point3.x - point2.x) ** 2 + (point3.y - point2.y) ** 2)
     c = math.sqrt((point1.x - point3.x) ** 2 + (point1.y - point3.y) ** 2)
     
-    # Calculate the angle at point2 using the law of cosines
     angle = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
     return math.degrees(angle)
 
 def detect_start_pose(landmarks):
+    # Check if the user is in the start pose which is defined by having the arms stretched out at 90 degrees relative to the body.
     global previous_frame_in_start_pose
     
-    # Assuming mp_pose is a module from MediaPipe and has been imported as such
     left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
     right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
     left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
@@ -160,11 +157,12 @@ def detect_start_pose(landmarks):
     right_angle = calculate_angle(right_hip, right_shoulder, right_elbow)
     
     # Check if both angles are close to 90 degrees
-    angle_threshold = 10  # Define how close to 90 degrees the angles should be
+    threshold = 10
+    angle_threshold = threshold # Define how close to 90 degrees the angles should be
     in_start_pose = abs(90 - left_angle) < angle_threshold and abs(90 - right_angle) < angle_threshold
     
     if in_start_pose and not previous_frame_in_start_pose:
-        # Example: mqtt_client.publish_state('start_pose')
+        mqtt_client.publish_state('start_pose')
         print("Start pose detected")
     
     previous_frame_in_start_pose = in_start_pose
