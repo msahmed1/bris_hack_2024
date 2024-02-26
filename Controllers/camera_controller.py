@@ -1,4 +1,5 @@
 # import files and set up 'correct' paths for silicon macs
+import math
 import mediapipe as mp
 import cv2
 import sys
@@ -30,8 +31,15 @@ crouch_counter = 0
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
+history = []
+previous_frame_standing = False
+standing_detected = False
+
+previous_frame_stationary = False
+previous_frame_in_start_pose = False
+
 # Draw connections between landmarks on body
-def draw_connections(image, landmarks):
+def draw_skeleton_on_body(image, landmarks):
     # Render detections
     mp_drawing.draw_landmarks(image, landmarks, mp_pose.POSE_CONNECTIONS,
                               mp_drawing.DrawingSpec(
@@ -78,6 +86,8 @@ def detect_crouching(landmarks):
 
 # detect standing
 def detect_standing(landmarks):
+    global previous_frame_standing, standing_detected
+
     # Detect standing when shoulders are above hips and hips are above knees
     shoulder_y = (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
                   landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
@@ -85,10 +95,79 @@ def detect_standing(landmarks):
              landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y) / 2
     knee_y = (landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y +
               landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y) / 2
+    
+    standing_detected = shoulder_y < hip_y < knee_y and not jump_in_progress # and (knee_y - shoulder_y) > some_threshold:
 
-    if shoulder_y < hip_y < knee_y and not jump_in_progress:  # and (knee_y - shoulder_y) > some_threshold:
+    if standing_detected and not previous_frame_standing:  
         mqtt_client.publish_state('standing')
         print("standing detected")
+
+    previous_frame_standing = standing_detected
+
+def detect_stationary(landmarks, threshold=0.05):
+    # Check if landmarks have not moved significantly based on history.
+    global history, previous_frame_stationary
+
+    current_positions = [(landmark.x, landmark.y) for landmark in landmarks]
+
+    if not history:
+        history.append(current_positions)
+        return False
+    # Calculate deltas for each landmark comparing to the last frame
+    deltas = [((curr[0] - prev[0])**2 + (curr[1] - prev[1])**2)**0.5 for curr, prev in zip(current_positions, history[-1])]
+    max_delta = max(deltas)
+
+    # Update history
+    history.append(current_positions)
+    if len(history) > 4:  # Limit history length to 4 to manage memory
+        history.pop(0)
+
+    is_stationary = max_delta < threshold
+
+    # Check if the maximum movement delta is below the threshold
+    if is_stationary and not previous_frame_stationary:
+        mqtt_client.publish_state('standing')
+        print("stationary detected")
+    
+    previous_frame_stationary = is_stationary
+
+def calculate_angle(point1, point2, point3):
+    """
+    Calculate the angle at point2 given points in the order: point1, point2, point3.
+    """
+    # Calculate the sides of the triangle
+    a = math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2)
+    b = math.sqrt((point3.x - point2.x) ** 2 + (point3.y - point2.y) ** 2)
+    c = math.sqrt((point1.x - point3.x) ** 2 + (point1.y - point3.y) ** 2)
+    
+    # Calculate the angle at point2 using the law of cosines
+    angle = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
+    return math.degrees(angle)
+
+def detect_start_pose(landmarks):
+    global previous_frame_in_start_pose
+    
+    # Assuming mp_pose is a module from MediaPipe and has been imported as such
+    left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+    right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+    left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+    right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+    left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
+    right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value]
+    
+    # Calculate angles at the shoulders
+    left_angle = calculate_angle(left_hip, left_shoulder, left_elbow)
+    right_angle = calculate_angle(right_hip, right_shoulder, right_elbow)
+    
+    # Check if both angles are close to 90 degrees
+    angle_threshold = 10  # Define how close to 90 degrees the angles should be
+    in_start_pose = abs(90 - left_angle) < angle_threshold and abs(90 - right_angle) < angle_threshold
+    
+    if in_start_pose and not previous_frame_in_start_pose:
+        # Example: mqtt_client.publish_state('start_pose')
+        print("Start pose detected")
+    
+    previous_frame_in_start_pose = in_start_pose
 
 # Video Feed
 cap = cv2.VideoCapture(camera_optn)
@@ -118,7 +197,9 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
             landmarks = results.pose_landmarks.landmark
             detect_crouching(landmarks)
             detect_jumping(landmarks)
-            detect_standing(landmarks)
+            # detect_standing(landmarks)
+            detect_stationary(landmarks)
+            detect_start_pose(landmarks)
         except:
             pass
 
@@ -128,7 +209,7 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
         cv2.putText(resized_image, f'Crouches: {crouch_counter}', (10, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-        draw_connections(resized_image, results.pose_landmarks)
+        draw_skeleton_on_body(resized_image, results.pose_landmarks)
 
         cv2.imshow('Mediapipe Feed', resized_image)
 
